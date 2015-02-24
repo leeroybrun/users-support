@@ -1,7 +1,22 @@
 ﻿<?xml version='1.0' encoding='utf-8'?>
-<SettingsFile xmlns="uri:settings" CurrentProfile="(Default)">
-  <Profiles>
-    <Profile Name="(Default)" />
-  </Profiles>
-  <Settings />
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="UsersSupport.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="LdapComputerPaths" Type="System.Collections.Specialized.StringCollection" Scope="Application">
+      <Value Profile="(Default)">&lt;?xml version="1.0" encoding="utf-16"?&gt;
+&lt;ArrayOfString xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"&gt;
+  &lt;string&gt;LDAP://OU=Laptops,OU=Computers,OU=Company,DC=mydomain,DC=local&lt;/string&gt;
+  &lt;string&gt;LDAP://OU=Workstations,OU=Computers,OU=Company,DC=mydomain,DC=local&lt;/string&gt;
+&lt;/ArrayOfString&gt;</Value>
+    </Setting>
+    <Setting Name="LdapDomain" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">mydomain.local</Value>
+    </Setting>
+    <Setting Name="TvncPort" Type="System.Int32" Scope="Application">
+      <Value Profile="(Default)">5800</Value>
+    </Setting>
+    <Setting Name="TvncViewerPath" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">C:\Program Files\TightVNC\tvnviewer.exe</Value>
+    </Setting>
+  </Settings>
 </SettingsFile>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,6 +14,8 @@ using System.Net.Sockets;
 using System.Diagnostics;
 using System.Windows;
 using System.IO;
+using System.Runtime.InteropServices;
+using ActiveDs; 
 
 namespace UsersSupport
 {
@@ -22,19 +25,19 @@ namespace UsersSupport
         public DateTime lastLogon { get; set; }
         public String lastLoggedUser { get; set; }
 
-        public Computer(String name, String lastLoggedUser, DateTime? lastLogon)
+        public Computer(String name, String lastLoggedUser, DateTime lastLogon)
         {
             this.name = name;
             this.lastLoggedUser = lastLoggedUser;
-            this.lastLogon = lastLogon ?? DateTime.FromOADate(0);
+            this.lastLogon = lastLogon;
 
             this.ip = this.GetIP();
         }
 
         public void OpenTightVNC()
         {
-            String tvncViewerFile = @"C:\Program Files\TightVNC\tvnviewer.exe";
-            if (this.IsOnline() && this.IsPortOpen(5800))
+            String tvncViewerFile = (string)Settings.Get("TvncViewerPath");
+            if (this.IsOnline() && this.IsPortOpen((int)Settings.Get("TvncPort")))
             {
                 if (File.Exists(tvncViewerFile))
                 {
@@ -50,7 +53,7 @@ namespace UsersSupport
                 else
                 {
                     // Tight VNC Viewer does not exists, launch web viewer
-                    Process.Start("http://" + this.ip + ":5800");
+                    Process.Start("http://" + this.ip + ":" + (int)Settings.Get("TvncPort"));
                 }
             }
             else
@@ -133,7 +136,9 @@ namespace UsersSupport
                     Scope = new ManagementScope(String.Format("\\\\{0}\\root\\CIMV2", this.name), Conn);
                 }
                 else
+                {
                     Scope = new ManagementScope(String.Format("\\\\{0}\\root\\CIMV2", this.name), null);
+                }
 
                 Scope.Connect();
 
@@ -150,22 +155,6 @@ namespace UsersSupport
                         owner = argList[0];
                     }
                 }
-
-                /*ObjectQuery Query = new ObjectQuery("SELECT LogonId  FROM Win32_LogonSession Where LogonType=2");
-                ManagementObjectSearcher Searcher = new ManagementObjectSearcher(Scope, Query);
-
-                foreach (ManagementObject WmiObject in Searcher.Get())
-                {
-                    Console.WriteLine("{0,-35} {1,-40}", "LogonId", WmiObject["LogonId"]);// String
-
-                    ObjectQuery LQuery = new ObjectQuery("Associators of {Win32_LogonSession.LogonId=" + WmiObject["LogonId"] + "} Where AssocClass=Win32_LoggedOnUser Role=Dependent");
-                    ManagementObjectSearcher LSearcher = new ManagementObjectSearcher(Scope, LQuery);
-                    foreach (ManagementObject LWmiObject in LSearcher.Get())
-                    {
-                        System.Diagnostics.Debug.Write(LWmiObject);
-                        Console.WriteLine("{0,-35} {1,-40}", "Name", LWmiObject["Name"]);
-                    }
-                }*/
             }
             catch (Exception e)
             {
@@ -178,24 +167,16 @@ namespace UsersSupport
 
     class DataAPI
     {
-        public ObservableCollection<Computer> GetComputers()
+        public List<Computer> GetComputers()
         {
-            ObservableCollection<Computer> list = new ObservableCollection<Computer>();
+            List<Computer> list = new List<Computer>();
 
             try
             {
-
-                PrincipalContext pc = new PrincipalContext(ContextType.Domain, "BATIPLUS");
-                PrincipalSearcher ps = new PrincipalSearcher(new ComputerPrincipal(pc));
-                PrincipalSearchResult<Principal> psr = ps.FindAll();
-                foreach (ComputerPrincipal cp in psr)
+                StringCollection ldapPaths = (StringCollection)Settings.Get("LdapComputerPaths");
+                foreach (string lapPath in ldapPaths)
                 {
-                    if (cp.Enabled == true)
-                    {
-                        Computer computer = new Computer(cp.Name, cp.Description, cp.LastLogon);
-
-                        list.Add(computer);
-                    }
+                    addComputersFromLDAPpath(list, lapPath);
                 }
             }
             catch (Exception e)
@@ -206,6 +187,47 @@ namespace UsersSupport
             return list;
         }
 
-        
+        public void addComputersFromLDAPpath(List<Computer> list, string ldapPath)
+        {
+            DirectoryEntry entry = new DirectoryEntry("LDAP://" + (string)Settings.Get("LdapDomain"));
+            entry.Path = ldapPath;
+            DirectorySearcher mySearcher = new DirectorySearcher(entry);
+            mySearcher.Filter = ("(objectClass=computer)");
+            mySearcher.SizeLimit = int.MaxValue;
+            mySearcher.PageSize = int.MaxValue;
+
+            foreach (SearchResult resEnt in mySearcher.FindAll())
+            {
+                DirectoryEntry cp = resEnt.GetDirectoryEntry();
+                if (cp.NativeGuid != null)
+                {
+                    int flags = (int)cp.Properties["userAccountControl"].Value;
+                    bool enabled = !Convert.ToBoolean(flags & 0x0002);
+
+                    Console.WriteLine((string)cp.Properties["Name"][0]);
+
+                    if (enabled)
+                    {
+                        Int64 lastLogonThisServer = new Int64();
+                        if (cp.Properties["lastLogon"].Value != null)
+                        {
+                            IADsLargeInteger lgInt = (IADsLargeInteger)cp.Properties["lastLogon"].Value;
+                            lastLogonThisServer = ((long)lgInt.HighPart << 32) + lgInt.LowPart;
+                        }
+
+                        DateTime lastLogon = DateTime.FromFileTime(lastLogonThisServer);
+                        String name = (cp.Properties.Contains("Name") && cp.Properties["Name"].Count > 0) ? (string)cp.Properties["Name"][0] : "";
+                        String desc = (cp.Properties.Contains("Description") && cp.Properties["Description"].Count > 0) ? (string)cp.Properties["Description"][0] : "";
+
+                        Computer computer = new Computer(name, desc, lastLogon);
+
+                        list.Add(computer);
+                    }
+                }
+            }
+
+            mySearcher.Dispose();
+            entry.Dispose();
+        }
     }
 }
